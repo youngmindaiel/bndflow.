@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#FBE9E1">
+<meta name="description" content="학생 수 세기용 간단한 카운터 앱. 여러 카운터를 만들고 +/- 로 세고, 자동 저장됩니다.">
+<title>학생 카운터</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #FFF8F4;
+    --header: #FBE9E1;
+    --card: #FFFFFF;
+    --text: #1F1B18;
+    --muted: #8A7F78;
+    --line: #E6DCD5;
+    --fab: #DDEBC8;
+    --fab-ink: #33452A;
+    --shadow: 0 2px 10px rgba(80, 50, 30, 0.08);
+  }
+
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    overscroll-behavior-y: contain;
+  }
+
+  button { font-family: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+  /* ─── 헤더 ─── */
+  header {
+    flex: 0 0 auto;
+    background: var(--header);
+    padding: calc(env(safe-area-inset-top) + 10px) 14px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .icon-btn {
+    width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 12px;
+    font-size: 22px; line-height: 1;
+  }
+  .icon-btn:active { background: rgba(0,0,0,0.06); }
+  .icon-btn[disabled] { opacity: 0.3; }
+  .icon-btn.undo { width: auto; padding: 0 12px; font-size: 14px; font-weight: 500; }
+  h1 { flex: 1; font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+
+  .total-bar {
+    flex: 0 0 auto;
+    background: var(--header);
+    padding: 0 18px 12px;
+    display: flex; align-items: baseline; gap: 8px;
+    font-size: 14px; color: var(--muted);
+  }
+  .total-bar b { font-size: 22px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .total-bar.hidden { display: none; }
+
+  /* ─── 카운터 그리드 ─── */
+  main {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 18px 14px calc(env(safe-area-inset-bottom) + 110px);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px 18px;
+  }
+  @media (min-width: 620px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (min-width: 900px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+  .counter { display: flex; flex-direction: column; align-items: stretch; }
+
+  .name {
+    text-align: center;
+    font-size: 16px; font-weight: 500;
+    padding: 4px 6px 8px;
+    color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    border-radius: 8px;
+  }
+  .name:active { background: rgba(0,0,0,0.05); }
+
+  .box {
+    border: 2px solid var(--c);
+    border-radius: 22px;
+    overflow: hidden;
+    background: var(--card);
+    box-shadow: var(--shadow);
+  }
+  .value {
+    display: flex; align-items: center; justify-content: center;
+    height: 96px;
+    font-size: 46px; font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -1px;
+    width: 100%;
+  }
+  .value.small { font-size: 34px; }
+  .value:active { background: rgba(0,0,0,0.04); }
+
+  .ops { display: flex; height: 84px; border-top: 2px solid var(--c); }
+  .op {
+    flex: 1;
+    background: var(--c);
+    color: #fff;
+    font-size: 30px; font-weight: 300; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .op:active { filter: brightness(0.88); }
+  .op.minus { border-right: 1px solid rgba(255,255,255,0.6); }
+
+  .quick {
+    display: flex; gap: 12px; margin-top: 12px;
+  }
+  .quick button {
+    flex: 1;
+    border: 1px solid #9A8C7F;
+    border-radius: 14px;
+    padding: 12px 4px;
+    font-size: 14px;
+    background: var(--card);
+  }
+  .quick button:active { background: #F0E7E0; }
+
+  .selected .box { box-shadow: 0 0 0 3px rgba(0,0,0,0.07), var(--shadow); }
+
+  /* ─── 빈 화면 ─── */
+  .empty {
+    text-align: center; color: var(--muted);
+    padding: 70px 20px; font-size: 15px; line-height: 1.7;
+  }
+
+  /* ─── FAB ─── */
+  .fab {
+    position: fixed;
+    right: 18px;
+    bottom: calc(env(safe-area-inset-bottom) + 22px);
+    width: 68px; height: 68px;
+    border-radius: 22px;
+    background: var(--fab); color: var(--fab-ink);
+    font-size: 30px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 14px rgba(80, 60, 30, 0.22);
+  }
+  .fab:active { transform: scale(0.95); }
+
+  /* ─── 모달 ─── */
+  .backdrop {
+    position: fixed; inset: 0;
+    background: rgba(30, 20, 15, 0.45);
+    display: flex; align-items: flex-end; justify-content: center;
+    z-index: 50;
+  }
+  .backdrop[hidden] { display: none !important; }
+  .sheet {
+    width: 100%; max-width: 520px;
+    background: var(--card);
+    border-radius: 22px 22px 0 0;
+    padding: 20px 20px calc(env(safe-area-inset-bottom) + 20px);
+    max-height: 88vh; overflow-y: auto;
+    animation: rise 0.18s ease-out;
+  }
+  @keyframes rise { from { transform: translateY(18px); opacity: 0.6; } }
+  .sheet h2 { font-size: 18px; margin-bottom: 16px; font-weight: 600; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .field input[type="text"], .field input[type="number"] {
+    width: 100%; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 12px;
+    font-size: 16px; font-family: inherit; background: #FCFAF8; color: var(--text);
+  }
+  .field input:focus { outline: 2px solid #C9B8AB; outline-offset: -1px; }
+  .row2 { display: flex; gap: 12px; }
+  .row2 .field { flex: 1; }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+  .swatch {
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 3px solid transparent;
+  }
+  .swatch[aria-pressed="true"] { border-color: var(--text); }
+
+  .sheet-actions { display: flex; gap: 10px; margin-top: 22px; }
+  .btn {
+    flex: 1; padding: 14px; border-radius: 14px;
+    font-size: 15px; font-weight: 500; text-align: center;
+  }
+  .btn-primary { background: #2F6B3C; color: #fff; }
+  .btn-ghost { background: #F1EAE4; color: var(--text); }
+  .btn-danger { background: #FBE6E4; color: #B3261E; }
+
+  .menu-item {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; padding: 15px 6px;
+    font-size: 16px; text-align: left;
+    border-bottom: 1px solid var(--line);
+  }
+  .menu-item:last-child { border-bottom: none; }
+  .menu-item:active { background: #F7F1EC; }
+  .menu-item .tag { margin-left: auto; font-size: 13px; color: var(--muted); }
+  .menu-item.danger { color: #B3261E; }
+
+  /* ─── 토스트 ─── */
+  #toast {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    top: calc(env(safe-area-inset-top) + 66px);
+    background: rgba(35, 25, 20, 0.92); color: #fff;
+    padding: 11px 18px; border-radius: 999px;
+    font-size: 14px; z-index: 80;
+    transition: opacity 0.2s;
+  }
+  #toast[hidden] { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <button class="icon-btn" id="menuBtn" aria-label="메뉴">☰</button>
+  <h1>모든 카운터</h1>
+  <button class="icon-btn undo" id="undoBtn" aria-label="되돌리기" disabled>되돌리기</button>
+</header>
+
+<div class="total-bar" id="totalBar">
+  <span>합계</span><b id="totalValue">0</b><span id="totalCount"></span>
+</div>
+
+<main>
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="empty" hidden>
+    아직 카운터가 없습니다.<br>
+    오른쪽 아래 <b>+</b> 버튼으로 만들어 보세요.
+  </p>
+</main>
+
+<button class="fab" id="addBtn" aria-label="카운터 추가">＋</button>
+
+<!-- 카운터 편집 -->
+<div class="backdrop" id="editBackdrop" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+    <h2 id="editTitle">카운터 편집</h2>
+    <div class="field">
+      <label for="fName">이름</label>
+      <input type="text" id="fName" maxlength="20" placeholder="예: 1학년" autocomplete="off">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="fValue">현재 값</label>
+        <input type="number" id="fValue" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="fStep">증감 단위</label>
+        <input type="number" id="fStep" inputmode="numeric" min="1">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="fBig">빠른 버튼 단위</label>
+        <input type="number" id="fBig" inputmode="numeric" min="1">
+      </div>
+      <div class="field">
+        <label for="fMin">최솟값</label>
+        <input type="number" id="fMin" inputmode="numeric">
+      </div>
+    </div>
+    <div class="field">
+      <label>색상</label>
+      <div class="swatches" id="swatches"></div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="editCancel">취소</button>
+      <button class="btn btn-primary" id="editSave">저장</button>
+    </div>
+    <div class="sheet-actions" id="editExtra">
+      <button class="btn btn-ghost" id="editMoveLeft">← 앞으로</button>
+      <button class="btn btn-ghost" id="editMoveRight">뒤로 →</button>
+      <button class="btn btn-danger" id="editDelete">삭제</button>
+    </div>
+  </div>
+</div>
+
+<!-- 메뉴 -->
+<div class="backdrop" id="menuBackdrop" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-label="메뉴">
+    <h2>설정</h2>
+    <button class="menu-item" id="mToggleTotal">합계 표시<span class="tag" id="tagTotal"></span></button>
+    <button class="menu-item" id="mToggleVibe">누를 때 진동<span class="tag" id="tagVibe"></span></button>
+    <button class="menu-item" id="mResetAll">모두 0으로 초기화</button>
+    <button class="menu-item" id="mCopy">결과 복사하기</button>
+    <button class="menu-item danger" id="mDeleteAll">카운터 전체 삭제</button>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="menuClose">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var COLORS = ['#F59300', '#E23B3B', '#2E7D32', '#1A6FC4', '#7B4FBF', '#0E9294', '#D6337F', '#5D6D7E'];
+  var STORE_KEY = 'student-counter.v1';
+
+  var state = {
+    counters: [],
+    selectedId: null,
+    showTotal: true,
+    vibrate: true
+  };
+  var undoStack = [];
+  var editingId = null;
+  var pendingColor = COLORS[0];
+
+  /* ─── 저장 / 불러오기 ─── */
+  function save() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        counters: state.counters,
+        selectedId: state.selectedId,
+        showTotal: state.showTotal,
+        vibrate: state.vibrate
+      }));
+    } catch (e) { /* 사생활 보호 모드 등 — 저장만 생략 */ }
+  }
+
+  function load() {
+    var raw = null;
+    try { raw = localStorage.getItem(STORE_KEY); } catch (e) { raw = null; }
+    if (!raw) return false;
+    try {
+      var data = JSON.parse(raw);
+      if (!data || !Array.isArray(data.counters)) return false;
+      state.counters = data.counters.map(normalize);
+      state.selectedId = data.selectedId || null;
+      state.showTotal = data.showTotal !== false;
+      state.vibrate = data.vibrate !== false;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function normalize(c) {
+    return {
+      id: c.id || makeId(),
+      name: typeof c.name === 'string' ? c.name : '카운터',
+      value: num(c.value, 0),
+      step: Math.max(1, num(c.step, 1)),
+      bigStep: Math.max(1, num(c.bigStep, 10)),
+      min: num(c.min, 0),
+      color: c.color || COLORS[0]
+    };
+  }
+
+  function num(v, fallback) {
+    var n = parseInt(v, 10);
+    return isNaN(n) ? fallback : n;
+  }
+
+  function makeId() {
+    return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  /* ─── 렌더링 ─── */
+  var grid = document.getElementById('grid');
+  var empty = document.getElementById('empty');
+
+  function render() {
+    grid.innerHTML = '';
+    empty.hidden = state.counters.length > 0;
+
+    state.counters.forEach(function (c) {
+      var wrap = document.createElement('div');
+      wrap.className = 'counter' + (c.id === state.selectedId ? ' selected' : '');
+      wrap.style.setProperty('--c', c.color);
+      wrap.dataset.id = c.id;
+
+      var name = document.createElement('button');
+      name.className = 'name';
+      name.textContent = c.name;
+      name.setAttribute('aria-label', c.name + ' 설정 열기');
+      name.addEventListener('click', function () { openEdit(c.id); });
+
+      var box = document.createElement('div');
+      box.className = 'box';
+
+      var value = document.createElement('button');
+      value.className = 'value' + (String(c.value).length > 4 ? ' small' : '');
+      value.textContent = c.value;
+      value.setAttribute('aria-label', c.name + ' 현재 ' + c.value + ', 눌러서 선택');
+      value.addEventListener('click', function () {
+        state.selectedId = (state.selectedId === c.id) ? null : c.id;
+        save();
+        render();
+      });
+
+      var ops = document.createElement('div');
+      ops.className = 'ops';
+
+      var minus = document.createElement('button');
+      minus.className = 'op minus';
+      minus.textContent = '−';
+      minus.setAttribute('aria-label', c.name + ' ' + c.step + ' 빼기');
+      minus.addEventListener('click', function () { bump(c.id, -c.step); });
+
+      var plus = document.createElement('button');
+      plus.className = 'op';
+      plus.textContent = '＋';
+      plus.setAttribute('aria-label', c.name + ' ' + c.step + ' 더하기');
+      plus.addEventListener('click', function () { bump(c.id, c.step); });
+
+      ops.appendChild(minus);
+      ops.appendChild(plus);
+      box.appendChild(value);
+      box.appendChild(ops);
+      wrap.appendChild(name);
+      wrap.appendChild(box);
+
+      if (c.id === state.selectedId) {
+        var quick = document.createElement('div');
+        quick.className = 'quick';
+        quick.appendChild(quickBtn(c, -c.bigStep));
+        quick.appendChild(quickBtn(c, c.bigStep));
+        wrap.appendChild(quick);
+      }
+
+      grid.appendChild(wrap);
+    });
+
+    renderTotal();
+    document.getElementById('undoBtn').disabled = undoStack.length === 0;
+  }
+
+  function quickBtn(c, delta) {
+    var b = document.createElement('button');
+    b.textContent = (delta > 0 ? '+ ' : '- ') + Math.abs(delta);
+    b.setAttribute('aria-label', c.name + ' ' + Math.abs(delta) + (delta > 0 ? ' 더하기' : ' 빼기'));
+    b.addEventListener('click', function () { bump(c.id, delta); });
+    return b;
+  }
+
+  function renderTotal() {
+    var bar = document.getElementById('totalBar');
+    bar.classList.toggle('hidden', !state.showTotal || state.counters.length === 0);
+    var sum = state.counters.reduce(function (a, c) { return a + c.value; }, 0);
+    document.getElementById('totalValue').textContent = sum;
+    document.getElementById('totalCount').textContent =
+      '(카운터 ' + state.counters.length + '개)';
+  }
+
+  /* ─── 값 변경 ─── */
+  function find(id) {
+    for (var i = 0; i < state.counters.length; i++) {
+      if (state.counters[i].id === id) return state.counters[i];
+    }
+    return null;
+  }
+
+  function bump(id, delta) {
+    var c = find(id);
+    if (!c) return;
+    var next = c.value + delta;
+    if (next < c.min) next = c.min;
+    if (next === c.value) { buzz(); return; }
+    undoStack.push({ type: 'bump', id: id, from: c.value, to: next });
+    if (undoStack.length > 50) undoStack.shift();
+    c.value = next;
+    buzz();
+    save();
+    render();
+  }
+
+  function buzz() {
+    if (!state.vibrate) return;
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+  }
+
+  document.getElementById('undoBtn').addEventListener('click', function () {
+    var last = undoStack.pop();
+    if (!last) return;
+    if (last.type === 'bump') {
+      var c = find(last.id);
+      if (c) c.value = last.from;
+    } else if (last.type === 'snapshot') {
+      state.counters = last.counters.map(normalize);
+    }
+    save();
+    render();
+    toast('되돌렸습니다');
+  });
+
+  function pushSnapshot() {
+    undoStack.push({
+      type: 'snapshot',
+      counters: JSON.parse(JSON.stringify(state.counters))
+    });
+    if (undoStack.length > 50) undoStack.shift();
+  }
+
+  /* ─── 편집 시트 ─── */
+  var editBackdrop = document.getElementById('editBackdrop');
+  var fName = document.getElementById('fName');
+  var fValue = document.getElementById('fValue');
+  var fStep = document.getElementById('fStep');
+  var fBig = document.getElementById('fBig');
+  var fMin = document.getElementById('fMin');
+  var swatches = document.getElementById('swatches');
+
+  COLORS.forEach(function (color) {
+    var b = document.createElement('button');
+    b.className = 'swatch';
+    b.style.background = color;
+    b.setAttribute('aria-label', '색상 ' + color);
+    b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', function () {
+      pendingColor = color;
+      paintSwatches();
+    });
+    swatches.appendChild(b);
+  });
+
+  function paintSwatches() {
+    Array.prototype.forEach.call(swatches.children, function (b, i) {
+      b.setAttribute('aria-pressed', COLORS[i] === pendingColor ? 'true' : 'false');
+    });
+  }
+
+  function openEdit(id) {
+    var c = find(id);
+    if (!c) return;
+    editingId = id;
+    fName.value = c.name;
+    fValue.value = c.value;
+    fStep.value = c.step;
+    fBig.value = c.bigStep;
+    fMin.value = c.min;
+    pendingColor = c.color;
+    paintSwatches();
+    document.getElementById('editTitle').textContent = '카운터 편집';
+    document.getElementById('editExtra').hidden = false;
+    editBackdrop.hidden = false;
+  }
+
+  function openCreate() {
+    editingId = null;
+    fName.value = '';
+    fValue.value = 0;
+    fStep.value = 1;
+    fBig.value = 10;
+    fMin.value = 0;
+    pendingColor = COLORS[state.counters.length % COLORS.length];
+    paintSwatches();
+    document.getElementById('editTitle').textContent = '새 카운터';
+    document.getElementById('editExtra').hidden = true;
+    editBackdrop.hidden = false;
+    setTimeout(function () { fName.focus(); }, 60);
+  }
+
+  function closeEdit() { editBackdrop.hidden = true; }
+
+  document.getElementById('addBtn').addEventListener('click', openCreate);
+  document.getElementById('editCancel').addEventListener('click', closeEdit);
+  editBackdrop.addEventListener('click', function (e) {
+    if (e.target === editBackdrop) closeEdit();
+  });
+
+  document.getElementById('editSave').addEventListener('click', function () {
+    var name = fName.value.trim() || ('카운터 ' + (state.counters.length + 1));
+    var min = num(fMin.value, 0);
+    var value = Math.max(min, num(fValue.value, 0));
+    var patch = {
+      name: name,
+      value: value,
+      step: Math.max(1, num(fStep.value, 1)),
+      bigStep: Math.max(1, num(fBig.value, 10)),
+      min: min,
+      color: pendingColor
+    };
+
+    if (editingId) {
+      var c = find(editingId);
+      if (c) {
+        pushSnapshot();
+        for (var k in patch) { c[k] = patch[k]; }
+      }
+    } else {
+      patch.id = makeId();
+      pushSnapshot();
+      state.counters.push(normalize(patch));
+    }
+    closeEdit();
+    save();
+    render();
+  });
+
+  document.getElementById('editDelete').addEventListener('click', function () {
+    var c = find(editingId);
+    if (!c) return;
+    if (!confirm('"' + c.name + '" 카운터를 삭제할까요?')) return;
+    pushSnapshot();
+    state.counters = state.counters.filter(function (x) { return x.id !== editingId; });
+    if (state.selectedId === editingId) state.selectedId = null;
+    closeEdit();
+    save();
+    render();
+    toast('삭제했습니다 · 되돌리기로 복구');
+  });
+
+  function move(dir) {
+    var i = state.counters.findIndex(function (c) { return c.id === editingId; });
+    var j = i + dir;
+    if (i < 0 || j < 0 || j >= state.counters.length) return;
+    var tmp = state.counters[i];
+    state.counters[i] = state.counters[j];
+    state.counters[j] = tmp;
+    save();
+    render();
+  }
+  document.getElementById('editMoveLeft').addEventListener('click', function () { move(-1); });
+  document.getElementById('editMoveRight').addEventListener('click', function () { move(1); });
+
+  /* ─── 메뉴 시트 ─── */
+  var menuBackdrop = document.getElementById('menuBackdrop');
+
+  function openMenu() {
+    document.getElementById('tagTotal').textContent = state.showTotal ? '켬' : '끔';
+    document.getElementById('tagVibe').textContent = state.vibrate ? '켬' : '끔';
+    menuBackdrop.hidden = false;
+  }
+  function closeMenu() { menuBackdrop.hidden = true; }
+
+  document.getElementById('menuBtn').addEventListener('click', openMenu);
+  document.getElementById('menuClose').addEventListener('click', closeMenu);
+  menuBackdrop.addEventListener('click', function (e) {
+    if (e.target === menuBackdrop) closeMenu();
+  });
+
+  document.getElementById('mToggleTotal').addEventListener('click', function () {
+    state.showTotal = !state.showTotal;
+    document.getElementById('tagTotal').textContent = state.showTotal ? '켬' : '끔';
+    save();
+    renderTotal();
+  });
+
+  document.getElementById('mToggleVibe').addEventListener('click', function () {
+    state.vibrate = !state.vibrate;
+    document.getElementById('tagVibe').textContent = state.vibrate ? '켬' : '끔';
+    save();
+  });
+
+  document.getElementById('mResetAll').addEventListener('click', function () {
+    if (!state.counters.length) return;
+    if (!confirm('모든 카운터를 0으로 되돌릴까요?')) return;
+    pushSnapshot();
+    state.counters.forEach(function (c) { c.value = Math.max(0, c.min); });
+    closeMenu();
+    save();
+    render();
+    toast('초기화했습니다 · 되돌리기로 복구');
+  });
+
+  document.getElementById('mDeleteAll').addEventListener('click', function () {
+    if (!state.counters.length) return;
+    if (!confirm('카운터를 전부 삭제할까요?')) return;
+    pushSnapshot();
+    state.counters = [];
+    state.selectedId = null;
+    closeMenu();
+    save();
+    render();
+    toast('전체 삭제 · 되돌리기로 복구');
+  });
+
+  document.getElementById('mCopy').addEventListener('click', function () {
+    var lines = state.counters.map(function (c) { return c.name + ': ' + c.value; });
+    var sum = state.counters.reduce(function (a, c) { return a + c.value; }, 0);
+    lines.push('합계: ' + sum);
+    var text = lines.join('\n');
+    closeMenu();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { toast('결과를 복사했습니다'); },
+        function () { prompt('복사하세요', text); }
+      );
+    } else {
+      prompt('복사하세요', text);
+    }
+  });
+
+  /* ─── 토스트 ─── */
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.hidden = true; }, 1800);
+  }
+
+  /* ─── 키보드 (PC에서 쓸 때) ─── */
+  document.addEventListener('keydown', function (e) {
+    if (e.target.tagName === 'INPUT') {
+      if (e.key === 'Enter') document.getElementById('editSave').click();
+      if (e.key === 'Escape') closeEdit();
+      return;
+    }
+    if (e.key === 'Escape') { closeEdit(); closeMenu(); return; }
+    var c = find(state.selectedId) || state.counters[0];
+    if (!c) return;
+    if (e.key === 'ArrowUp' || e.key === '+' || e.key === '=') { bump(c.id, c.step); e.preventDefault(); }
+    if (e.key === 'ArrowDown' || e.key === '-') { bump(c.id, -c.step); e.preventDefault(); }
+  });
+
+  /* ─── 시작 ─── */
+  if (!load()) {
+    state.counters = [
+      normalize({ name: '1학년', color: COLORS[0] }),
+      normalize({ name: '2학년', color: COLORS[1] }),
+      normalize({ name: '3학년', color: COLORS[0] })
+    ];
+    save();
+  }
+  render();
+})();
+</script>
+</body>
+</html>
