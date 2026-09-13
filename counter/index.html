@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="학생 카운터">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#FBE9E1" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#2A211D" media="(prefers-color-scheme: dark)">
 <meta name="description" content="학생 수 세기용 간단한 카운터 앱. 여러 카운터를 만들고 +/- 로 세고, 자동 저장됩니다.">
@@ -790,6 +797,14 @@
     save();
   }
   render();
+
+  /* ─── 오프라인 실행 (웹에 올린 경우에만) ─── */
+  var secure = location.protocol === 'https:' || location.hostname === 'localhost';
+  if (document.querySelector('link[rel="manifest"]') && navigator.serviceWorker && secure) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
 })();
 </script>
 </body>
